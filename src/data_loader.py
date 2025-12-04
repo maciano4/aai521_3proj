@@ -15,7 +15,8 @@ from rasterio.features import rasterize
 import cv2
 import warnings
 
-warnings.filterwarnings('ignore', category=rasterio.errors.NotGeoreferencedWarning)
+# Suppress rasterio warnings
+warnings.filterwarnings('ignore', message='.*not georeferenced.*')
 
 
 class DatasetLoader:
@@ -134,7 +135,8 @@ class DatasetLoader:
                 'shape': image.shape,
                 'transform': src.transform,
                 'crs': src.crs,
-                'bounds': src.bounds
+                'bounds': src.bounds,
+                'filename': image_path.name  # Add original filename
             }
             
             # Transpose to (H, W, C)

@@ -79,7 +79,12 @@ NUM_CLASSES = 7  # Classes 0-6
 # Patch extraction
 PATCH_SIZE = 512  # Size for patch extraction (optimal for CV segmentation)
 PATCH_OVERLAP = 128  # Overlap between patches to ensure boundary coverage
-MIN_FLOOD_PIXELS = 2621  # Minimum flooded pixels to consider a patch "flood-positive" (~1% of 512x512 patch)
+MIN_FLOOD_PIXELS = 50  # ULTRA-AGGRESSIVE: Lowered to 50 (~0.02% of 512x512 patch) - capture all flood areas
+
+# Oversampling configuration for class balance
+OVERSAMPLE_TARGET_RATIO = 0.5  # Target 50% flood patches (was 40%)
+OVERSAMPLE_MAX_DUPLICATES = 30  # Maximum duplications per flood patch (was 20)
+USE_WEIGHTED_SAMPLING = True  # Enable weighted random sampling during training
 
 # Normalization settings
 # Based on typical satellite imagery ranges
@@ -92,30 +97,40 @@ CLAHE_CLIP_LIMIT = 2.0
 CLAHE_TILE_GRID_SIZE = (8, 8)
 
 # Advanced preprocessing (cloud removal, deblurring, geometric correction)
-APPLY_ADVANCED_PREPROCESSING = True
-REMOVE_CLOUDS = True
-APPLY_DEBLUR = True
-CORRECT_GEOMETRY = True
+# DISABLED: These steps can hurt performance by removing flood pixels and adding artifacts
+APPLY_ADVANCED_PREPROCESSING = False  # DISABLED - may remove flood data and add artifacts
+REMOVE_CLOUDS = False  # May incorrectly remove bright flood water (sun reflection)
+APPLY_DEBLUR = False   # Unnecessary for satellite data, may introduce noise
+CORRECT_GEOMETRY = False  # Unnecessary - satellite images already georeferenced
 
-# Class balancing
-# Based on EDA: ~20-22% flooded, ~78-80% non-flooded
+# Class balancing - OPTIMIZED FOR 60%+ IoU TARGET
+# With aggressive oversampling targeting 50% flood pixels, we need higher weights for minority classes
+# Formula: weight = (1 / frequency) * adjustment_factor
 CLASS_WEIGHTS = {
-    0: 1.0,   # background
-    1: 1.2,   # non-flooded buildings
-    2: 3.5,   # flooded buildings (heavily weighted due to imbalance)
-    3: 2.0,   # water
-    4: 4.0,   # flooded-water (highest priority)
-    5: 3.0,   # flooded roads (heavily weighted)
-    6: 1.3    # non-flooded roads
+    0: 0.3,   # background (abundant, heavily reduce weight to prevent bias)
+    1: 2.5,   # no-damage (buildings - moderate importance)
+    2: 5.0,   # minor-damage (critical for flood detection - INCREASED)
+    3: 8.0,   # major-damage (very rare, highest weight - INCREASED)
+    4: 10.0,  # destroyed (extremely rare, maximum weight - INCREASED)
+    5: 6.0,   # un-classified (rare, high weight - INCREASED)
+    6: 2.0    # non-flooded-road (moderate frequency)
 }
 
+# Focal loss parameters for hard example mining
+USE_FOCAL_LOSS = True
+FOCAL_ALPHA = 0.25  # Balancing factor
+FOCAL_GAMMA = 2.0   # Focusing parameter (higher = focus more on hard examples)
+
 # Data augmentation probabilities
-AUG_HORIZONTAL_FLIP_PROB = 0.5
-AUG_VERTICAL_FLIP_PROB = 0.5
-AUG_ROTATE_PROB = 0.5
-AUG_BRIGHTNESS_CONTRAST_PROB = 0.3
-AUG_GAUSSIAN_NOISE_PROB = 0.2
-AUG_BLUR_PROB = 0.15
+# INCREASED for flood-positive samples to improve generalization
+AUG_HORIZONTAL_FLIP_PROB = 0.7  # Increased from 0.5
+AUG_VERTICAL_FLIP_PROB = 0.7    # Increased from 0.5
+AUG_ROTATE_PROB = 0.6           # Increased from 0.5
+AUG_BRIGHTNESS_CONTRAST_PROB = 0.5  # Increased from 0.3
+AUG_GAUSSIAN_NOISE_PROB = 0.3   # Increased from 0.2
+AUG_BLUR_PROB = 0.2             # Increased from 0.15
+AUG_ELASTIC_TRANSFORM_PROB = 0.3  # NEW: Elastic deformation for flood patterns
+AUG_GRID_DISTORTION_PROB = 0.2    # NEW: Grid distortion for geometric variation
 
 # Quality control thresholds
 MIN_VALID_PIXELS_RATIO = 0.5  # Minimum ratio of valid (non-zero) pixels

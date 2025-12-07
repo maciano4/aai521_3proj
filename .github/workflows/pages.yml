@@ -33,16 +33,26 @@ jobs:
         run: |
           mkdir -p _site
           
-          # Copy only index.html from root
+          # Copy index.html from root
           echo "Copying index.html..."
           cp index.html _site/
           
+          # Copy images folder if it exists
+          if [ -d "images" ]; then
+            echo "Copying images folder..."
+            cp -r images _site/
+            echo "images folder copied"
+          else
+            echo "images folder not found, skipping"
+          fi
+          
+          echo ""
           echo "Build complete!"
-          echo "Files deployed: 1"
           echo ""
           echo "Build directory size:"
           du -sh _site
           echo ""
+          echo "Contents:"
           ls -lh _site/
 
       - name: Setup Pages

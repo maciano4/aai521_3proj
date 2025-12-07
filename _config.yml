@@ -7,11 +7,12 @@ description: Computer Vision project for flood detection using deep learning
 baseurl: "/aai521_3proj"
 url: "https://swapnilprakashpatil.github.io"
 
-# Exclude everything except index.html
+# Exclude everything except index.html and images folder
 exclude:
   - "*"
   - "**/*"
 
-# Include only index.html
+# Include only index.html and images folder
 include:
   - index.html
+  - images

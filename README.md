@@ -1,11 +1,11 @@
 # Flood Detection Segmentation - Spatio-Temporal Analysis
 
-<div align="center">
+<div>
 
 **University of San Diego**  
 AAI-521: Applied Computer Vision for AI
 
----
+## </div>
 
 **Professor**: Mohammad Yavarimanesh
 
@@ -17,8 +17,6 @@ AAI-521: Applied Computer Vision for AI
 - Swapnil Patil
 - Christopher Akeibom Toh
 - Nelson Arellano Parra
-
-</div>
 
 ---
 

@@ -1869,3 +1869,187 @@ class TrainingVisualizer:
                   f"{history['val_dice'][best_epoch]:<12.4f} {history['val_f1'][best_epoch]:<12.4f}")
         
         print(f"{'='*100}\n")
+
+
+# ============================================================================
+# MODEL EVALUATION VISUALIZATION FUNCTIONS
+# ============================================================================
+
+def plot_confusion_matrix(predictions, targets, class_names, normalize=True):
+    """
+    Plot confusion matrix for segmentation results.
+    
+    Args:
+        predictions: Predicted labels (torch.Tensor or numpy array)
+        targets: Ground truth labels (torch.Tensor or numpy array)
+        class_names: List of class names
+        normalize: Whether to normalize the confusion matrix
+        
+    Returns:
+        Confusion matrix array
+    """
+    from sklearn.metrics import confusion_matrix
+    import torch
+    
+    # Convert to numpy if needed
+    if torch.is_tensor(predictions):
+        predictions = predictions.numpy()
+    if torch.is_tensor(targets):
+        targets = targets.numpy()
+    
+    # Flatten predictions and targets
+    preds_flat = predictions.flatten()
+    targets_flat = targets.flatten()
+    
+    # Compute confusion matrix
+    cm = confusion_matrix(targets_flat, preds_flat, labels=range(len(class_names)))
+    
+    if normalize:
+        cm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
+        fmt = '.3f'
+        title = 'Normalized Confusion Matrix'
+    else:
+        fmt = 'd'
+        title = 'Confusion Matrix'
+    
+    # Plot
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, annot=True, fmt=fmt, cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names,
+                cbar_kws={'label': 'Proportion' if normalize else 'Count'})
+    plt.title(title, fontsize=14, fontweight='bold')
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+    plt.tight_layout()
+    plt.show()
+    
+    return cm
+
+
+def visualize_predictions(images, predictions, targets, indices, class_names):
+    """
+    Visualize predictions vs ground truth for selected samples.
+    
+    Args:
+        images: Input images (torch.Tensor or numpy array) [N, C, H, W]
+        predictions: Predicted labels [N, H, W]
+        targets: Ground truth labels [N, H, W]
+        indices: List of sample indices to visualize
+        class_names: List of class names for colorbar
+    """
+    import torch
+    
+    # Convert to numpy if needed
+    if torch.is_tensor(images):
+        images = images.cpu()
+    if torch.is_tensor(predictions):
+        predictions = predictions.cpu()
+    if torch.is_tensor(targets):
+        targets = targets.cpu()
+    
+    num_samples = len(indices)
+    fig, axes = plt.subplots(num_samples, 4, figsize=(20, 5*num_samples))
+    
+    if num_samples == 1:
+        axes = axes.reshape(1, -1)
+    
+    cmap = plt.cm.get_cmap('tab10', len(class_names))
+    
+    for i, idx in enumerate(indices):
+        # Get images
+        img = images[idx]
+        
+        # Handle both 3 and 6 channel inputs
+        if img.shape[0] == 6:
+            pre_img = img[:3].permute(1, 2, 0).numpy()
+            post_img = img[3:].permute(1, 2, 0).numpy()
+        else:
+            pre_img = img.permute(1, 2, 0).numpy()
+            post_img = pre_img.copy()
+        
+        # Normalize for display
+        pre_img = (pre_img - pre_img.min()) / (pre_img.max() - pre_img.min() + 1e-8)
+        post_img = (post_img - post_img.min()) / (post_img.max() - post_img.min() + 1e-8)
+        
+        pred = predictions[idx].numpy() if torch.is_tensor(predictions[idx]) else predictions[idx]
+        target = targets[idx].numpy() if torch.is_tensor(targets[idx]) else targets[idx]
+        
+        # Plot pre-event
+        axes[i, 0].imshow(pre_img)
+        axes[i, 0].set_title('Pre-Event Image', fontsize=12, fontweight='bold')
+        axes[i, 0].axis('off')
+        
+        # Plot post-event
+        axes[i, 1].imshow(post_img)
+        axes[i, 1].set_title('Post-Event Image', fontsize=12, fontweight='bold')
+        axes[i, 1].axis('off')
+        
+        # Plot ground truth
+        axes[i, 2].imshow(target, cmap=cmap, vmin=0, vmax=len(class_names)-1)
+        axes[i, 2].set_title('Ground Truth', fontsize=12, fontweight='bold')
+        axes[i, 2].axis('off')
+        
+        # Plot prediction
+        im = axes[i, 3].imshow(pred, cmap=cmap, vmin=0, vmax=len(class_names)-1)
+        axes[i, 3].set_title('Prediction', fontsize=12, fontweight='bold')
+        axes[i, 3].axis('off')
+        
+        # Add colorbar to last row
+        if i == num_samples - 1:
+            cbar = plt.colorbar(im, ax=axes[i, :], orientation='horizontal',
+                              pad=0.05, fraction=0.046)
+            cbar.set_ticks(range(len(class_names)))
+            cbar.set_ticklabels(class_names, rotation=45, ha='right')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def compute_and_print_metrics(predictions, targets, num_classes, class_names):
+    """
+    Compute and display comprehensive segmentation metrics.
+    
+    Args:
+        predictions: Predicted labels
+        targets: Ground truth labels
+        num_classes: Number of classes
+        class_names: List of class names
+        
+    Returns:
+        Tuple of (metrics dict, metrics DataFrame)
+    """
+    from metrics import SegmentationMetrics
+    
+    metrics_tracker = SegmentationMetrics(num_classes=num_classes)
+    metrics = metrics_tracker.compute_metrics(predictions, targets)
+    
+    # Print overall metrics
+    print("="*80)
+    print("OVERALL TEST SET PERFORMANCE")
+    print("="*80)
+    print(f"Mean IoU:  {metrics['mean_iou']:.4f}")
+    print(f"Mean Dice: {metrics['mean_dice']:.4f}")
+    print(f"Mean F1:   {metrics['mean_f1']:.4f}")
+    print(f"Accuracy:  {metrics['accuracy']:.4f}")
+    
+    # Print per-class metrics
+    print("\n" + "="*80)
+    print("PER-CLASS PERFORMANCE")
+    print("="*80)
+    
+    class_metrics = []
+    for i, class_name in enumerate(class_names):
+        class_metrics.append({
+            'Class': class_name,
+            'IoU': f"{metrics['iou_per_class'][i]:.4f}",
+            'Dice': f"{metrics['dice_per_class'][i]:.4f}",
+            'F1': f"{metrics['f1_per_class'][i]:.4f}",
+            'Precision': f"{metrics['precision_per_class'][i]:.4f}",
+            'Recall': f"{metrics['recall_per_class'][i]:.4f}"
+        })
+    
+    df = pd.DataFrame(class_metrics)
+    print(df.to_string(index=False))
+    print("="*80)
+    
+    return metrics, df

@@ -1,0 +1,17 @@
+# Minimal Jekyll Configuration for GitHub Pages
+# Deploys only index.html from root
+
+# Site settings
+title: AAI-521 Flood Detection Project
+description: Computer Vision project for flood detection using deep learning
+baseurl: "/aai521_3proj"
+url: "https://swapnilprakashpatil.github.io"
+
+# Exclude everything except index.html
+exclude:
+  - "*"
+  - "**/*"
+
+# Include only index.html
+include:
+  - index.html

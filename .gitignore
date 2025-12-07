@@ -37,6 +37,21 @@ dataset/processed
 *.manifest
 *.spec
 
+# Project-specific: Large directories that should NEVER be in Git
+# These directories contain 100+ GB of data
+dataset/
+outputs/
+tmp/
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+_site/
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt

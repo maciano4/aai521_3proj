@@ -345,18 +345,26 @@ def compute_sample_iou(predictions, targets):
     Compute IoU for each sample individually.
     
     Args:
-        predictions: Predicted labels tensor [N, H, W]
-        targets: Ground truth labels tensor [N, H, W]
+        predictions: Predicted labels (numpy array or torch tensor) [N, H, W]
+        targets: Ground truth labels (numpy array or torch tensor) [N, H, W]
         
     Returns:
         Array of IoU scores per sample
     """
+    import torch
+    
+    # Convert to numpy if torch tensor
+    if isinstance(predictions, torch.Tensor):
+        predictions = predictions.numpy()
+    if isinstance(targets, torch.Tensor):
+        targets = targets.numpy()
+    
     ious = []
     
     for pred, target in zip(predictions, targets):
         # Compute IoU for this sample
-        intersection = (pred == target).sum().item()
-        union = pred.numel()
+        intersection = (pred == target).sum()
+        union = pred.size  # Use .size for numpy arrays instead of .numel()
         iou = intersection / union if union > 0 else 0.0
         ious.append(iou)
     

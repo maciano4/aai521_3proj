@@ -1869,3 +1869,409 @@ class TrainingVisualizer:
                   f"{history['val_dice'][best_epoch]:<12.4f} {history['val_f1'][best_epoch]:<12.4f}")
         
         print(f"{'='*100}\n")
+
+
+# ============================================================================
+# MODEL EVALUATION VISUALIZATION FUNCTIONS
+# ============================================================================
+
+def plot_confusion_matrix(predictions, targets, class_names, normalize=True):
+    """
+    Plot confusion matrix for segmentation results.
+    
+    Args:
+        predictions: Predicted labels (torch.Tensor or numpy array)
+        targets: Ground truth labels (torch.Tensor or numpy array)
+        class_names: List of class names
+        normalize: Whether to normalize the confusion matrix
+        
+    Returns:
+        Confusion matrix array
+    """
+    from sklearn.metrics import confusion_matrix
+    import torch
+    
+    # Convert to numpy if needed
+    if torch.is_tensor(predictions):
+        predictions = predictions.numpy()
+    if torch.is_tensor(targets):
+        targets = targets.numpy()
+    
+    # Flatten predictions and targets
+    preds_flat = predictions.flatten()
+    targets_flat = targets.flatten()
+    
+    # Compute confusion matrix
+    cm = confusion_matrix(targets_flat, preds_flat, labels=range(len(class_names)))
+    
+    if normalize:
+        cm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
+        fmt = '.3f'
+        title = 'Normalized Confusion Matrix'
+    else:
+        fmt = 'd'
+        title = 'Confusion Matrix'
+    
+    # Plot
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, annot=True, fmt=fmt, cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names,
+                cbar_kws={'label': 'Proportion' if normalize else 'Count'})
+    plt.title(title, fontsize=14, fontweight='bold')
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+    plt.tight_layout()
+    plt.show()
+    
+    return cm
+
+
+def visualize_predictions(images, predictions, targets, indices, class_names):
+    """
+    Visualize predictions vs ground truth for selected samples.
+    
+    Args:
+        images: Input images (torch.Tensor or numpy array) [N, C, H, W]
+        predictions: Predicted labels [N, H, W]
+        targets: Ground truth labels [N, H, W]
+        indices: List of sample indices to visualize
+        class_names: List of class names for colorbar
+    """
+    import torch
+    
+    # Convert to numpy if needed
+    if torch.is_tensor(images):
+        images = images.cpu()
+    if torch.is_tensor(predictions):
+        predictions = predictions.cpu()
+    if torch.is_tensor(targets):
+        targets = targets.cpu()
+    
+    num_samples = len(indices)
+    fig, axes = plt.subplots(num_samples, 4, figsize=(20, 5*num_samples))
+    
+    if num_samples == 1:
+        axes = axes.reshape(1, -1)
+    
+    cmap = plt.cm.get_cmap('tab10', len(class_names))
+    
+    for i, idx in enumerate(indices):
+        # Get images
+        img = images[idx]
+        
+        # Handle both numpy arrays and torch tensors
+        if torch.is_tensor(img):
+            img = img.cpu()
+            # Handle both 3 and 6 channel inputs
+            if img.shape[0] == 6:
+                pre_img = img[:3].permute(1, 2, 0).numpy()
+                post_img = img[3:].permute(1, 2, 0).numpy()
+            else:
+                pre_img = img.permute(1, 2, 0).numpy()
+                post_img = pre_img.copy()
+        else:
+            # Already numpy array - transpose from (C, H, W) to (H, W, C)
+            if img.shape[0] == 6:
+                pre_img = np.transpose(img[:3], (1, 2, 0))
+                post_img = np.transpose(img[3:], (1, 2, 0))
+            else:
+                pre_img = np.transpose(img, (1, 2, 0))
+                post_img = pre_img.copy()
+        
+        # Normalize for display
+        pre_img = (pre_img - pre_img.min()) / (pre_img.max() - pre_img.min() + 1e-8)
+        post_img = (post_img - post_img.min()) / (post_img.max() - post_img.min() + 1e-8)
+        
+        pred = predictions[idx].numpy() if torch.is_tensor(predictions[idx]) else predictions[idx]
+        target = targets[idx].numpy() if torch.is_tensor(targets[idx]) else targets[idx]
+        
+        # Plot pre-event
+        axes[i, 0].imshow(pre_img)
+        axes[i, 0].set_title('Pre-Event Image', fontsize=12, fontweight='bold')
+        axes[i, 0].axis('off')
+        
+        # Plot post-event
+        axes[i, 1].imshow(post_img)
+        axes[i, 1].set_title('Post-Event Image', fontsize=12, fontweight='bold')
+        axes[i, 1].axis('off')
+        
+        # Plot ground truth
+        axes[i, 2].imshow(target, cmap=cmap, vmin=0, vmax=len(class_names)-1)
+        axes[i, 2].set_title('Ground Truth', fontsize=12, fontweight='bold')
+        axes[i, 2].axis('off')
+        
+        # Plot prediction
+        im = axes[i, 3].imshow(pred, cmap=cmap, vmin=0, vmax=len(class_names)-1)
+        axes[i, 3].set_title('Prediction', fontsize=12, fontweight='bold')
+        axes[i, 3].axis('off')
+        
+        # Add colorbar to last row
+        if i == num_samples - 1:
+            cbar = plt.colorbar(im, ax=axes[i, :], orientation='horizontal',
+                              pad=0.05, fraction=0.046)
+            cbar.set_ticks(range(len(class_names)))
+            cbar.set_ticklabels(class_names, rotation=45, ha='right')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def compute_and_print_metrics(predictions, targets, num_classes, class_names):
+    """
+    Compute and display comprehensive segmentation metrics (ultra memory-efficient for 16GB RAM).
+    
+    Args:
+        predictions: Predicted labels (numpy array or torch tensor)
+        targets: Ground truth labels (numpy array or torch tensor)
+        num_classes: Number of classes
+        class_names: Dict or list of class names
+        
+    Returns:
+        Tuple of (metrics dict, metrics DataFrame)
+    """
+    import torch
+    from metrics import SegmentationMetrics
+    
+    # Convert to numpy if torch tensor
+    if isinstance(predictions, torch.Tensor):
+        predictions = predictions.numpy()
+    if isinstance(targets, torch.Tensor):
+        targets = targets.numpy()
+    
+    # Initialize metrics tracker
+    metrics_tracker = SegmentationMetrics(num_classes=num_classes, class_names=class_names)
+    
+    # Process ONE sample at a time for 16GB RAM systems
+    num_samples = predictions.shape[0]
+    
+    print(f"Processing {num_samples} samples (one at a time for low memory)...")
+    for i in range(num_samples):
+        # Process single sample
+        single_pred = torch.from_numpy(predictions[i:i+1])
+        single_target = torch.from_numpy(targets[i:i+1])
+        
+        metrics_tracker.update(single_pred, single_target)
+        
+        # Progress indicator every 500 samples
+        if (i + 1) % 500 == 0:
+            print(f"  Processed {i+1}/{num_samples} samples...")
+        
+        # Clear variables immediately
+        del single_pred, single_target
+    
+    print(f"  Completed {num_samples}/{num_samples} samples")
+    
+    # Compute all metrics
+    metrics = metrics_tracker.compute_all_metrics()
+    
+    # Print overall metrics
+    print("="*80)
+    print("OVERALL TEST SET PERFORMANCE")
+    print("="*80)
+    print(f"Mean IoU:        {metrics['mean_iou']:.4f}")
+    print(f"Mean Dice:       {metrics['mean_dice']:.4f}")
+    print(f"Macro F1:        {metrics['macro_f1']:.4f}")
+    print(f"Pixel Accuracy:  {metrics['pixel_accuracy']:.4f}")
+    
+    # Print per-class metrics
+    print("\n" + "="*80)
+    print("PER-CLASS PERFORMANCE")
+    print("="*80)
+    
+    # Convert class_names dict to list if needed
+    if isinstance(class_names, dict):
+        class_names_list = [class_names[i] for i in range(num_classes)]
+    else:
+        class_names_list = class_names
+    
+    class_metrics = []
+    for i, class_name in enumerate(class_names_list):
+        class_metrics.append({
+            'Class': class_name,
+            'IoU': f"{metrics['iou_per_class'][i]:.4f}",
+            'Dice': f"{metrics['dice_per_class'][i]:.4f}",
+            'F1': f"{metrics['f1_per_class'][i]:.4f}",
+            'Precision': f"{metrics['precision_per_class'][i]:.4f}",
+            'Recall': f"{metrics['recall_per_class'][i]:.4f}"
+        })
+    
+    df = pd.DataFrame(class_metrics)
+    print(df.to_string(index=False))
+    print("="*80)
+    
+    return metrics, df
+
+
+def plot_confusion_matrix_from_history(history, model_name, class_names):
+    """
+    Plot confusion matrix from history data.
+    
+    Args:
+        history: Training history dictionary with 'confusion_matrix' key
+        model_name: Name of the model
+        class_names: List of class names
+    """
+    if history is None:
+        print(f"No history available for {model_name}")
+        return
+    
+    # Check if confusion matrix exists (new format: 7x7 matrix)
+    if 'confusion_matrix' not in history:
+        print(f"No confusion matrix data available for {model_name}")
+        print("Note: Run update_cm_data.py to add confusion matrix data to histories")
+        return
+    
+    # Get confusion matrix (already aggregated 7x7)
+    cm = np.array(history['confusion_matrix'])
+    
+    # Normalize confusion matrix
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    
+    # Plot
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+    
+    # Raw counts
+    sns.heatmap(cm, annot=True, fmt=',d', cmap='Blues', 
+               xticklabels=class_names, yticklabels=class_names,
+               ax=ax1, cbar_kws={'label': 'Pixel Count'})
+    ax1.set_title(f'{model_name} - Confusion Matrix (Counts)', 
+                 fontsize=14, fontweight='bold')
+    ax1.set_ylabel('True Label', fontsize=12)
+    ax1.set_xlabel('Predicted Label', fontsize=12)
+    plt.setp(ax1.get_xticklabels(), rotation=45, ha='right', fontsize=10)
+    plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=10)
+    
+    # Normalized
+    sns.heatmap(cm_normalized, annot=True, fmt='.3f', cmap='Blues',
+               xticklabels=class_names, yticklabels=class_names,
+               ax=ax2, cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
+    ax2.set_title(f'{model_name} - Confusion Matrix (Normalized)', 
+                 fontsize=14, fontweight='bold')
+    ax2.set_ylabel('True Label', fontsize=12)
+    ax2.set_xlabel('Predicted Label', fontsize=12)
+    plt.setp(ax2.get_xticklabels(), rotation=45, ha='right', fontsize=10)
+    plt.setp(ax2.get_yticklabels(), rotation=0, fontsize=10)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Print key metrics
+    print(f"\n{model_name} Classification Analysis:")
+    print("="*80)
+    total = cm.sum()
+    correct = np.trace(cm)
+    accuracy = correct / total if total > 0 else 0
+    print(f"Total pixels: {total:,}")
+    print(f"Correct pixels: {correct:,}")
+    print(f"Pixel accuracy: {accuracy:.4f}")
+    
+    # Per-class accuracy
+    print(f"\nPer-class breakdown:")
+    for i, cls_name in enumerate(class_names):
+        class_total = int(cm[i].sum())
+        class_correct = int(cm[i, i])
+        class_acc = class_correct / class_total if class_total > 0 else 0
+        print(f"  {str(cls_name):20s}: {class_correct:8,}/{class_total:8,} ({class_acc:.2%})")
+    print("="*80)
+
+
+def plot_combined_confusion_matrices(model_histories, class_names):
+    """
+    Plot combined confusion matrices for all models in a grid layout.
+    
+    Args:
+        model_histories: List of (history, model_name) tuples
+        class_names: List of class names
+    """
+    # Filter out None histories and those without confusion matrices
+    valid_models = [(h, n) for h, n in model_histories 
+                    if h is not None and 'confusion_matrix' in h]
+    
+    if not valid_models:
+        print("No valid confusion matrix data available for any model")
+        return
+    
+    num_models = len(valid_models)
+    
+    # Create grid layout (2 rows for small num_models, 3 rows for larger)
+    if num_models <= 2:
+        rows, cols = 1, num_models
+        figsize = (10 * num_models, 8)
+    elif num_models <= 4:
+        rows, cols = 2, 2
+        figsize = (20, 16)
+    else:
+        rows, cols = 2, 3
+        figsize = (30, 16)
+    
+    fig, axes = plt.subplots(rows, cols, figsize=figsize)
+    
+    # Flatten axes for easy iteration
+    if num_models == 1:
+        axes = np.array([axes])
+    else:
+        axes = axes.flatten()
+    
+    # Plot each model's confusion matrix
+    for idx, ((history, model_name), ax) in enumerate(zip(valid_models, axes)):
+        cm = np.array(history['confusion_matrix'])
+        cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        
+        # Plot normalized confusion matrix
+        sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                   xticklabels=class_names, yticklabels=class_names,
+                   ax=ax, cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
+        
+        # Calculate accuracy
+        total = cm.sum()
+        correct = np.trace(cm)
+        accuracy = correct / total if total > 0 else 0
+        
+        ax.set_title(f'{model_name}\nPixel Accuracy: {accuracy:.2%}', 
+                    fontsize=13, fontweight='bold')
+        ax.set_ylabel('True Label', fontsize=11)
+        ax.set_xlabel('Predicted Label', fontsize=11)
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=9)
+        plt.setp(ax.get_yticklabels(), rotation=0, fontsize=9)
+    
+    # Hide unused subplots
+    for idx in range(num_models, len(axes)):
+        axes[idx].axis('off')
+    
+    plt.suptitle('Confusion Matrix Comparison - All Models (Normalized)', 
+                 fontsize=16, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    plt.show()
+    
+    # Print summary statistics
+    print("\n" + "="*100)
+    print("CONFUSION MATRIX SUMMARY - ALL MODELS")
+    print("="*100)
+    print(f"{'Model':<20} {'Pixel Accuracy':<15} {'Best Class':<25} {'Worst Class':<25}")
+    print("-"*100)
+    
+    for history, model_name in valid_models:
+        cm = np.array(history['confusion_matrix'])
+        
+        # Overall accuracy
+        total = cm.sum()
+        correct = np.trace(cm)
+        accuracy = correct / total if total > 0 else 0
+        
+        # Per-class accuracy
+        class_accs = []
+        for i in range(len(class_names)):
+            class_total = cm[i].sum()
+            class_correct = cm[i, i]
+            class_acc = class_correct / class_total if class_total > 0 else 0
+            class_accs.append((class_names[i], class_acc))
+        
+        # Best and worst classes
+        best_class = max(class_accs, key=lambda x: x[1])
+        worst_class = min(class_accs, key=lambda x: x[1])
+        
+        print(f"{model_name:<20} {accuracy:<15.2%} "
+              f"{best_class[0]:<15} ({best_class[1]:.2%})   "
+              f"{worst_class[0]:<15} ({worst_class[1]:.2%})")
+    
+    print("="*100)

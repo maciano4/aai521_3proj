@@ -195,13 +195,17 @@ class SegFormer(nn.Module):
         
         try:
             from transformers import SegformerForSemanticSegmentation
+            import warnings
             
             if pretrained:
-                self.model = SegformerForSemanticSegmentation.from_pretrained(
-                    model_name,
-                    num_labels=num_classes,
-                    ignore_mismatched_sizes=True
-                )
+                # Suppress warnings about mismatched sizes (expected when changing num_labels)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore')
+                    self.model = SegformerForSemanticSegmentation.from_pretrained(
+                        model_name,
+                        num_labels=num_classes,
+                        ignore_mismatched_sizes=True
+                    )
             else:
                 from transformers import SegformerConfig
                 config = SegformerConfig.from_pretrained(model_name)

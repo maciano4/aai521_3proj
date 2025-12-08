@@ -128,10 +128,11 @@ class FloodDataset(Dataset):
         if weight_sum > 0:
             self.class_weights = (self.class_weights / weight_sum) * self.num_classes
         
-        print(f"\nClass distribution ({self.split}):")
-        for i in range(self.num_classes):
-            pct = (self.class_counts[i] / total_pixels) * 100 if total_pixels > 0 else 0
-            print(f"  Class {i}: {self.class_counts[i]:,} pixels ({pct:.2f}%), weight: {self.class_weights[i]:.4f}")
+        # Class distribution - commented out
+        #print(f"\nClass distribution ({self.split}):")
+        #for i in range(self.num_classes):
+        #    pct = (self.class_counts[i] / total_pixels) * 100 if total_pixels > 0 else 0
+        #    print(f"  Class {i}: {self.class_counts[i]:,} pixels ({pct:.2f}%), weight: {self.class_weights[i]:.4f}")
     
     def __len__(self) -> int:
         return len(self.metadata)
